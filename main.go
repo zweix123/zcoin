@@ -12,7 +12,7 @@ func main() {
 	time.Sleep(time.Second)
 	chain.AddBlock("After genesis, I have something to say.")
 	time.Sleep(time.Second)
-	chain.AddBlock("Leo Cao is awesome!")
+	chain.AddBlock("zweix is awesome!")
 	time.Sleep(time.Second)
 	chain.AddBlock("I can't wait to follow his github!")
 	time.Sleep(time.Second)
