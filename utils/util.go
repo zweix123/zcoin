@@ -21,3 +21,12 @@ func ToHexInt(num int64) []byte {
 	}
 	return buff.Bytes()
 }
+
+func IsInSlice(value int, slice []int) bool {
+	for _, val := range slice {
+		if val == value {
+			return true
+		}
+	}
+	return false
+}
