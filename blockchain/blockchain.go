@@ -1,33 +1,117 @@
 package blockchain
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
+	"runtime"
 
+	"github.com/dgraph-io/badger"
+	"github.com/zweix123/zcoin/constcoe"
 	"github.com/zweix123/zcoin/transaction"
 	"github.com/zweix123/zcoin/utils"
 )
 
 type BlockChain struct {
-	Blocks []*Block
+	Tip []byte
+	DB  *badger.DB
 }
 
-func (bc *BlockChain) AddBlock(txs []*transaction.Transaction) {
-	newBlock := CreateBlock(bc.Blocks[len(bc.Blocks)-1].Hash, txs)
-	bc.Blocks = append(bc.Blocks, newBlock)
+func InitBlockChain(address []byte) *BlockChain {
+	var tip []byte
+	if utils.FileExists(constcoe.BCFile) {
+		fmt.Println("blockchain already exists")
+		runtime.Goexit()
+	}
+
+	opts := badger.DefaultOptions(constcoe.BCPath)
+	opts.Logger = nil
+
+	db, err := badger.Open(opts)
+	utils.Handle(err)
+
+	err = db.Update(func(txn *badger.Txn) error {
+		genesis := GenesisBlock(address)
+		fmt.Println("Genesis Created")
+		err = txn.Set(genesis.Hash, genesis.Serialize())
+		utils.Handle(err)
+		err = txn.Set([]byte("l"), genesis.Hash)
+		utils.Handle(err)
+		err = txn.Set([]byte("out-of-bounds"), genesis.PrevHash)
+		tip = genesis.Hash
+		return err
+	})
+	utils.Handle(err)
+	return &BlockChain{Tip: tip, DB: db}
+
 }
 
-func CreateBlockChain() *BlockChain {
-	blockchain := BlockChain{}
-	blockchain.Blocks = append(blockchain.Blocks, GenesisBlock())
-	return &blockchain
+func ContinueBlockChain() *BlockChain {
+	if !utils.FileExists(constcoe.BCFile) {
+		fmt.Println("No blockchain found, please create one first")
+		runtime.Goexit()
+	}
+
+	var tip []byte
+
+	opts := badger.DefaultOptions(constcoe.BCPath)
+	opts.Logger = nil
+	db, err := badger.Open(opts)
+	utils.Handle(err)
+
+	err = db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("l"))
+		utils.Handle(err)
+		err = item.Value(func(val []byte) error {
+			tip = val
+			return nil
+		})
+		utils.Handle(err)
+		return err
+	})
+	utils.Handle(err)
+
+	return &BlockChain{tip, db}
+}
+
+func (bc *BlockChain) AddBlock(newBlock *Block) {
+	var tip []byte
+
+	err := bc.DB.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("l"))
+		utils.Handle(err)
+		err = item.Value(func(val []byte) error {
+			tip = val
+			return nil
+		})
+		utils.Handle(err)
+
+		return err
+	})
+	utils.Handle(err)
+	if !bytes.Equal(newBlock.PrevHash, tip) {
+		fmt.Println("This block is out of age")
+		runtime.Goexit()
+	}
+
+	err = bc.DB.Update(func(txn *badger.Txn) error {
+		err := txn.Set(newBlock.Hash, newBlock.Serialize())
+		utils.Handle(err)
+		err = txn.Set([]byte("l"), newBlock.Hash)
+		bc.Tip = newBlock.Hash
+		return err
+	})
+	utils.Handle(err)
 }
 
 func (bc *BlockChain) FindUnspentTransactions(address []byte) []transaction.Transaction {
 	var unSpentTxs []transaction.Transaction
 	spentTxs := make(map[string][]int) // key is tx id([]byte不能作为key)
-	for idx := len(bc.Blocks) - 1; idx >= 0; idx-- {
-		block := bc.Blocks[idx]
+
+	iter := bc.Iterator()
+	for {
+		block := iter.Next()
+
 		for _, tx := range block.Transactions {
 			txID := hex.EncodeToString(tx.ID)
 
@@ -54,6 +138,11 @@ func (bc *BlockChain) FindUnspentTransactions(address []byte) []transaction.Tran
 				}
 			}
 		}
+
+		if bc.IsEnd(block) {
+			break
+		}
+
 	}
 	return unSpentTxs
 }
@@ -125,6 +214,17 @@ func (bc *BlockChain) CreateTransaction(from, to []byte, amount int) (*transacti
 	return &tx, true
 }
 
-func (bc *BlockChain) Mine(txs []*transaction.Transaction) {
-	bc.AddBlock(txs)
+func (bc *BlockChain) RunMine() {
+	transactionPool := CreateTransactionPool()
+	//In the near future, we'll have to validate the transactions first here.
+	candidateBlock := CreateBlock(bc.Tip, transactionPool.PubTxs) //PoW has been done here.
+	if candidateBlock.ValidatePoW() {
+		bc.AddBlock(candidateBlock)
+		err := RemoveTransactionPoolFile()
+		utils.Handle(err)
+		return
+	} else {
+		fmt.Println("Block has invalid nonce.")
+		return
+	}
 }

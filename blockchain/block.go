@@ -3,6 +3,7 @@ package blockchain
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/gob"
 	"time"
 
 	"github.com/zweix123/zcoin/transaction"
@@ -57,7 +58,23 @@ func CreateBlock(prevhash []byte, txs []*transaction.Transaction) *Block {
 	return block
 }
 
-func GenesisBlock() *Block {
-	tx := transaction.BaseTx([]byte("zweix"))
-	return CreateBlock([]byte{}, []*transaction.Transaction{tx})
+func GenesisBlock(address []byte) *Block {
+	tx := transaction.BaseTx([]byte(address))
+	return CreateBlock([]byte("zweix is sawesome!"), []*transaction.Transaction{tx})
+}
+
+func (b *Block) Serialize() []byte {
+	var res bytes.Buffer
+	encoder := gob.NewEncoder(&res)
+	err := encoder.Encode(b)
+	utils.Handle(err)
+	return res.Bytes()
+}
+
+func DeSerializeBlock(data []byte) *Block {
+	var block Block
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+	err := decoder.Decode(&block)
+	utils.Handle(err)
+	return &block
 }
