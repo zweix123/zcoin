@@ -2,6 +2,7 @@ package transaction
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"crypto/sha256"
 	"encoding/gob"
 
@@ -33,13 +34,14 @@ func (tx *Transaction) SetID() {
 
 func BaseTx(toaddress []byte) *Transaction {
 	txIn := TxInput{
-		TxID:        []byte{},
-		OutIdx:      -1,
-		FromAddress: []byte{},
+		TxID:   []byte{},
+		OutIdx: -1,
+		PubKey: []byte{},
+		Sig:    nil,
 	}
 	txOut := TxOutput{
-		Value:     constcoe.InitCoin,
-		ToAddress: toaddress,
+		Value:      constcoe.InitCoin,
+		HashPubKey: toaddress,
 	}
 	tx := Transaction{
 		ID:      []byte("This is the Base Transaction!"),
@@ -51,4 +53,43 @@ func BaseTx(toaddress []byte) *Transaction {
 
 func (tx *Transaction) IsBase() bool {
 	return len(tx.Inputs) == 1 && tx.Inputs[0].OutIdx == -1
+}
+
+func (tx *Transaction) PlainCopy() Transaction {
+	var inputs []TxInput
+	var outputs []TxOutput
+	for _, txin := range tx.Inputs {
+		inputs = append(inputs, TxInput{txin.TxID, txin.OutIdx, nil, nil})
+	}
+	for _, txout := range tx.Outputs {
+		outputs = append(outputs, TxOutput{txout.Value, txout.HashPubKey})
+	}
+	return Transaction{tx.ID, inputs, outputs}
+}
+
+func (tx *Transaction) PlainHash(inidx int, prevPubKey []byte) []byte {
+	txCopy := tx.PlainCopy()
+	txCopy.Inputs[inidx].PubKey = prevPubKey
+	return txCopy.TxHash()
+}
+
+func (tx *Transaction) Sign(privKey ecdsa.PrivateKey) {
+	if tx.IsBase() {
+		return
+	}
+	for idx, input := range tx.Inputs {
+		plainhash := tx.PlainHash(idx, input.PubKey) // This is because we want to sign the inputs seperately!
+		signature := utils.Sign(plainhash, privKey)
+		tx.Inputs[idx].Sig = signature
+	}
+}
+
+func (tx *Transaction) Verify() bool {
+	for idx, input := range tx.Inputs {
+		plainhash := tx.PlainHash(idx, input.PubKey)
+		if !utils.Verify(plainhash, input.PubKey, input.Sig) {
+			return false
+		}
+	}
+	return true
 }

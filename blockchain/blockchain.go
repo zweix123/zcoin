@@ -2,8 +2,10 @@ package blockchain
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"runtime"
 
 	"github.com/dgraph-io/badger"
@@ -188,11 +190,11 @@ Work:
 	return accumulated, unspentOuts
 }
 
-func (bc *BlockChain) CreateTransaction(from, to []byte, amount int) (*transaction.Transaction, bool) {
+func (bc *BlockChain) CreateTransaction(from_PubKey, to_HashPubKey []byte, amount int, privkey ecdsa.PrivateKey) (*transaction.Transaction, bool) {
 	var inputs []transaction.TxInput
 	var outputs []transaction.TxOutput
 
-	acc, validOutputs := bc.FindSpendableOutputs(from, amount)
+	acc, validOutputs := bc.FindSpendableOutputs(from_PubKey, amount)
 	if acc < amount {
 		fmt.Println("Not enough coins!")
 		return &transaction.Transaction{}, false
@@ -200,23 +202,31 @@ func (bc *BlockChain) CreateTransaction(from, to []byte, amount int) (*transacti
 	for txid, outidx := range validOutputs {
 		txID, err := hex.DecodeString(txid)
 		utils.Handle(err)
-		input := transaction.TxInput{TxID: txID, OutIdx: outidx, FromAddress: from}
+		input := transaction.TxInput{TxID: txID, OutIdx: outidx, PubKey: from_PubKey, Sig: nil}
 		inputs = append(inputs, input)
 	}
 
-	outputs = append(outputs, transaction.TxOutput{Value: amount, ToAddress: to})
+	outputs = append(outputs, transaction.TxOutput{Value: amount, HashPubKey: to_HashPubKey})
 	if acc > amount {
-		outputs = append(outputs, transaction.TxOutput{Value: acc - amount, ToAddress: from})
+		outputs = append(outputs, transaction.TxOutput{Value: acc - amount, HashPubKey: utils.PublicKeyHash(from_PubKey)})
 	}
 	tx := transaction.Transaction{ID: nil, Inputs: inputs, Outputs: outputs}
+
 	tx.SetID()
 
+	tx.Sign(privkey)
 	return &tx, true
 }
 
 func (bc *BlockChain) RunMine() {
 	transactionPool := CreateTransactionPool()
-	//In the near future, we'll have to validate the transactions first here.
+	if !bc.VerifyTransactions(transactionPool.PubTxs) {
+		log.Println("falls in transactions verification")
+		err := RemoveTransactionPoolFile()
+		utils.Handle(err)
+		return
+	}
+
 	candidateBlock := CreateBlock(bc.Tip, transactionPool.PubTxs) //PoW has been done here.
 	if candidateBlock.ValidatePoW() {
 		bc.AddBlock(candidateBlock)
