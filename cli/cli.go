@@ -89,7 +89,7 @@ func (cli *CommandLine) createBlockChainRefName(refname string) {
 
 func (cli *CommandLine) createBlockChain(address string) {
 	newChain := blockchain.InitBlockChain(utils.Address2PubHash([]byte(address)))
-	newChain.DB.Close()
+	newChain.Database.Close()
 	fmt.Println("Finished creating blockchain, and the owner is: ", address)
 }
 
@@ -102,7 +102,7 @@ func (cli *CommandLine) balanceRefName(refname string) {
 
 func (cli *CommandLine) balance(address string) {
 	chain := blockchain.ContinueBlockChain()
-	defer chain.DB.Close()
+	defer chain.Database.Close()
 
 	wlt := wallet.LoadWallet(address)
 
@@ -112,9 +112,10 @@ func (cli *CommandLine) balance(address string) {
 
 func (cli *CommandLine) getBlockChainInfo() {
 	chain := blockchain.ContinueBlockChain()
-	defer chain.DB.Close()
+	defer chain.Database.Close()
+
 	iterator := chain.Iterator()
-	ogprevhash := chain.BackOgPrevHash()
+	outboundHash := chain.GetOutBoundHash()
 	for {
 		block := iterator.Next()
 		fmt.Println("--------------------------------------------------------------------------------------------------------------")
@@ -125,7 +126,7 @@ func (cli *CommandLine) getBlockChainInfo() {
 		fmt.Printf("Pow: %s\n", strconv.FormatBool(block.ValidatePoW()))
 		fmt.Println("--------------------------------------------------------------------------------------------------------------")
 		fmt.Println()
-		if bytes.Equal(block.PrevHash, ogprevhash) {
+		if bytes.Equal(block.PrevHash, outboundHash) {
 			break
 		}
 	}
@@ -142,7 +143,7 @@ func (cli *CommandLine) sendRefName(fromRefname, toRefname string, amount int) {
 
 func (cli *CommandLine) send(from, to string, amount int) {
 	chain := blockchain.ContinueBlockChain()
-	defer chain.DB.Close()
+	defer chain.Database.Close()
 	fromWallet := wallet.LoadWallet(from)
 	tx, ok := chain.CreateTransaction(fromWallet.PublicKey, utils.Address2PubHash([]byte(to)), amount, fromWallet.PrivateKey)
 	if !ok {
@@ -157,7 +158,7 @@ func (cli *CommandLine) send(from, to string, amount int) {
 
 func (cli *CommandLine) mine() {
 	chain := blockchain.ContinueBlockChain()
-	defer chain.DB.Close()
+	defer chain.Database.Close()
 	chain.RunMine()
 	fmt.Println("Finish Mining")
 }
@@ -244,6 +245,10 @@ func (cli *CommandLine) Run() {
 	}
 
 	if createWalletCmd.Parsed() {
+		if *createWalletRefName == "" {
+			walletInfoCmd.Usage()
+			runtime.Goexit()
+		}
 		cli.createWallet(*createWalletRefName)
 	}
 

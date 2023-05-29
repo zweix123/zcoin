@@ -15,12 +15,12 @@ import (
 )
 
 type BlockChain struct {
-	Tip []byte
-	DB  *badger.DB
+	LastBlockHash []byte
+	Database      *badger.DB
 }
 
 func InitBlockChain(address []byte) *BlockChain {
-	var tip []byte
+	var lastBlockHash []byte
 	if utils.FileExists(constcoe.BCFile) {
 		fmt.Println("blockchain already exists")
 		runtime.Goexit()
@@ -40,12 +40,11 @@ func InitBlockChain(address []byte) *BlockChain {
 		err = txn.Set([]byte("l"), genesis.Hash)
 		utils.Handle(err)
 		err = txn.Set([]byte("out-of-bounds"), genesis.PrevHash)
-		tip = genesis.Hash
+		lastBlockHash = genesis.Hash
 		return err
 	})
 	utils.Handle(err)
-	return &BlockChain{Tip: tip, DB: db}
-
+	return &BlockChain{LastBlockHash: lastBlockHash, Database: db}
 }
 
 func ContinueBlockChain() *BlockChain {
@@ -54,10 +53,11 @@ func ContinueBlockChain() *BlockChain {
 		runtime.Goexit()
 	}
 
-	var tip []byte
+	var lastBlockHash []byte
 
 	opts := badger.DefaultOptions(constcoe.BCPath)
 	opts.Logger = nil
+
 	db, err := badger.Open(opts)
 	utils.Handle(err)
 
@@ -65,7 +65,7 @@ func ContinueBlockChain() *BlockChain {
 		item, err := txn.Get([]byte("l"))
 		utils.Handle(err)
 		err = item.Value(func(val []byte) error {
-			tip = val
+			lastBlockHash = val
 			return nil
 		})
 		utils.Handle(err)
@@ -73,17 +73,17 @@ func ContinueBlockChain() *BlockChain {
 	})
 	utils.Handle(err)
 
-	return &BlockChain{tip, db}
+	return &BlockChain{lastBlockHash, db}
 }
 
 func (bc *BlockChain) AddBlock(newBlock *Block) {
-	var tip []byte
+	var lastBlockHash []byte
 
-	err := bc.DB.View(func(txn *badger.Txn) error {
+	err := bc.Database.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte("l"))
 		utils.Handle(err)
 		err = item.Value(func(val []byte) error {
-			tip = val
+			lastBlockHash = val
 			return nil
 		})
 		utils.Handle(err)
@@ -91,16 +91,17 @@ func (bc *BlockChain) AddBlock(newBlock *Block) {
 		return err
 	})
 	utils.Handle(err)
-	if !bytes.Equal(newBlock.PrevHash, tip) {
+
+	if !bytes.Equal(newBlock.PrevHash, lastBlockHash) { // 测试中不会出现, 现在是单机区块链
 		fmt.Println("This block is out of age")
 		runtime.Goexit()
 	}
 
-	err = bc.DB.Update(func(txn *badger.Txn) error {
+	err = bc.Database.Update(func(txn *badger.Txn) error {
 		err := txn.Set(newBlock.Hash, newBlock.Serialize())
 		utils.Handle(err)
 		err = txn.Set([]byte("l"), newBlock.Hash)
-		bc.Tip = newBlock.Hash
+		bc.LastBlockHash = newBlock.Hash
 		return err
 	})
 	utils.Handle(err)
@@ -108,7 +109,8 @@ func (bc *BlockChain) AddBlock(newBlock *Block) {
 
 func (bc *BlockChain) FindUnspentTransactions(address []byte) []transaction.Transaction {
 	var unSpentTxs []transaction.Transaction
-	spentTxs := make(map[string][]int) // key is tx id([]byte不能作为key)
+	spentTxs := make(map[string][]int)
+	// tx id : list[被使用的交易的ID], 这里的key是string而不是[]byte是因为[]byte不能作为key
 
 	iter := bc.Iterator()
 	for {
@@ -121,17 +123,22 @@ func (bc *BlockChain) FindUnspentTransactions(address []byte) []transaction.Tran
 			for outIdx, out := range tx.Outputs {
 				if spentTxs[txID] != nil {
 					for _, spentOut := range spentTxs[txID] {
+						// 如果这个交易的有个output被通过
 						if spentOut == outIdx {
 							continue IterOutputs
+							// 那这个交易不可能是答案
 						}
 					}
 				}
-
+				// 如果逃过一劫, 就是
 				if out.ToAddressRight(address) {
 					unSpentTxs = append(unSpentTxs, *tx)
 				}
+				// 我们注意到这个添加的tx是一个循环外的, 会不会造成多次添加呢?
+				// 不会, 因为它一个一个if里, 一个交易的output肯定是不同的
 			}
-			if !tx.IsBase() {
+
+			if !tx.IsBase() { // 记录信息供上面使用
 				for _, in := range tx.Inputs {
 					if in.FromAddressRight(address) {
 						inTxID := hex.EncodeToString(in.TxID)
@@ -161,7 +168,7 @@ Work:
 			if out.ToAddressRight(address) {
 				accumulated += out.Value
 				unspentOuts[txID] = outIdx
-				continue Work // one transaction can only have one output referred to adderss
+				continue Work // 直接跳出, 因为一个交易, output的人肯定是不同的, 不会再有了
 			}
 		}
 	}
@@ -181,9 +188,9 @@ Work:
 				accumulated += out.Value
 				unspentOuts[txID] = outIdx
 				if accumulated >= amount {
-					break Work
+					break Work // 足够即可
 				}
-				continue Work // one transaction can only have one output referred to adderss
+				continue Work // 同上
 			}
 		}
 	}
@@ -222,12 +229,12 @@ func (bc *BlockChain) RunMine() {
 	transactionPool := CreateTransactionPool()
 	if !bc.VerifyTransactions(transactionPool.PubTxs) {
 		log.Println("falls in transactions verification")
-		err := RemoveTransactionPoolFile()
+		err := RemoveTransactionPoolFile() // 不通过也就删除了
 		utils.Handle(err)
 		return
 	}
 
-	candidateBlock := CreateBlock(bc.Tip, transactionPool.PubTxs) //PoW has been done here.
+	candidateBlock := CreateBlock(bc.LastBlockHash, transactionPool.PubTxs) // PoW
 	if candidateBlock.ValidatePoW() {
 		bc.AddBlock(candidateBlock)
 		err := RemoveTransactionPoolFile()

@@ -7,6 +7,8 @@ import (
 	"math/big"
 )
 
+// 私钥签名, 公钥认证
+
 func Sign(msg []byte, privKey ecdsa.PrivateKey) []byte {
 	r, s, err := ecdsa.Sign(rand.Reader, &privKey, msg)
 	Handle(err)

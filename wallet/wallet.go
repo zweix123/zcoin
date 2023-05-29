@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"os"
+	"path/filepath"
 
 	"github.com/zweix123/zcoin/constcoe"
 	"github.com/zweix123/zcoin/utils"
@@ -38,7 +39,7 @@ func NewWallet() *Wallet {
 }
 
 func (w *Wallet) Save() {
-	filename := constcoe.Wallets + string(w.Address()) + ".wlt"
+	filename := filepath.Join(constcoe.Wallets, string(w.Address())+".wlt")
 
 	privKeyBytes, err := x509.MarshalECPrivateKey(&w.PrivateKey)
 	utils.Handle(err)
@@ -53,7 +54,7 @@ func (w *Wallet) Save() {
 }
 
 func LoadWallet(address string) *Wallet {
-	filename := constcoe.Wallets + address + ".wlt"
+	filename := filepath.Join(constcoe.Wallets, address+".wlt")
 	if !utils.FileExists(filename) {
 		utils.Handle(errors.New("no wallet with such address"))
 	}

@@ -29,7 +29,7 @@ func (tx *Transaction) TxHash() []byte {
 }
 
 func (tx *Transaction) SetID() {
-	tx.ID = tx.TxHash()
+	tx.ID = tx.TxHash() // ID就是整体Hash
 }
 
 func BaseTx(toaddress []byte) *Transaction {
@@ -78,8 +78,8 @@ func (tx *Transaction) Sign(privKey ecdsa.PrivateKey) {
 		return
 	}
 	for idx, input := range tx.Inputs {
-		plainhash := tx.PlainHash(idx, input.PubKey) // This is because we want to sign the inputs seperately!
-		signature := utils.Sign(plainhash, privKey)
+		plainhash := tx.PlainHash(idx, input.PubKey) // 分别签名
+		signature := utils.Sign(plainhash, privKey)  // 签名是不包括签名的hash的加密
 		tx.Inputs[idx].Sig = signature
 	}
 }

@@ -15,10 +15,8 @@ import (
 
 type RefList map[string]string // 地址: 用户名
 
-const refListDateFile = "data"
-
 func (r *RefList) Save() {
-	filename := filepath.Join(constcoe.WalletsRefList, refListDateFile)
+	filename := filepath.Join(constcoe.WalletsRefList, constcoe.RefListDateFile)
 	var content bytes.Buffer
 	encoder := gob.NewEncoder(&content)
 	err := encoder.Encode(r)
@@ -28,7 +26,7 @@ func (r *RefList) Save() {
 }
 
 func LoadRefList() *RefList {
-	filename := filepath.Join(constcoe.WalletsRefList, refListDateFile)
+	filename := filepath.Join(constcoe.WalletsRefList, constcoe.RefListDateFile)
 	var reflist RefList
 	if utils.FileExists(filename) {
 		fileContent, err := os.ReadFile(filename)

@@ -7,14 +7,10 @@ import (
 	"github.com/zweix123/zcoin/transaction"
 )
 
-// mine.go
 func (bc *BlockChain) VerifyTransactions(txs []*transaction.Transaction) bool {
 	if len(txs) == 0 {
 		return true
 	}
-	//TODO: The following method to verify the transactions is to query the blockchain for
-	//unspent outputs and is definitely right. However, I believe in the near future, an unspent
-	//outputs database can be maintained to accelerate the verification.
 	spentOutputs := make(map[string]int)
 	for _, tx := range txs {
 		pubKey := tx.Inputs[0].PubKey

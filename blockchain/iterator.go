@@ -8,18 +8,21 @@ import (
 )
 
 type BlockChainIterator struct {
-	Current []byte
-	DB      *badger.DB
+	Current  []byte
+	Database *badger.DB
 }
 
 func (bc *BlockChain) Iterator() *BlockChainIterator {
-	iterator := BlockChainIterator{bc.Tip, bc.DB}
+	iterator := BlockChainIterator{bc.LastBlockHash, bc.Database}
 	return &iterator
 }
+
+// func (iterator *BlockChainIterator) Current() *Block
+
 func (iterator *BlockChainIterator) Next() *Block {
 	var block *Block
 
-	err := iterator.DB.View(func(txn *badger.Txn) error {
+	err := iterator.Database.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(iterator.Current)
 		utils.Handle(err)
 
@@ -40,7 +43,7 @@ func (iterator *BlockChainIterator) Next() *Block {
 func (bc *BlockChain) IsEnd(b *Block) bool {
 	var isEnd bool
 	var genesishash []byte
-	err := bc.DB.View(func(txn *badger.Txn) error {
+	err := bc.Database.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte("out-of-bounds"))
 		utils.Handle(err)
 		err = item.Value(func(val []byte) error {
@@ -55,10 +58,10 @@ func (bc *BlockChain) IsEnd(b *Block) bool {
 	return isEnd
 }
 
-func (chain *BlockChain) BackOgPrevHash() []byte {
+func (chain *BlockChain) GetOutBoundHash() []byte {
 	var ogprevhash []byte
-	err := chain.DB.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte("ogprevhash"))
+	err := chain.Database.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("out-of-bounds"))
 		utils.Handle(err)
 
 		err = item.Value(func(val []byte) error {

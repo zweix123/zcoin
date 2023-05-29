@@ -7,13 +7,20 @@ import (
 	"github.com/zweix123/zcoin/constcoe"
 )
 
-func main() {
-	os.MkdirAll("tmp", 0777)
+func init() {
+	os.MkdirAll(constcoe.TMPDIR, 0777)
 	os.MkdirAll(constcoe.BCPath, 0777)
 	os.MkdirAll(constcoe.Wallets, 0777)
 	os.MkdirAll(constcoe.WalletsRefList, 0777)
+}
 
-	defer os.Exit(0)
+func terminate() {
+	// os.RemoveAll(constcoe.TMPDIR)
+	os.Exit(0)
+}
+
+func main() {
+	defer terminate()
 
 	cmd := cli.CommandLine{}
 	cmd.Run()

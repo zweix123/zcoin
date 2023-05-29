@@ -11,15 +11,19 @@ import (
 )
 
 type Block struct {
-	Timestamp    int64  // 时间戳
-	Hash         []byte // 区块数据的Hash
-	PrevHash     []byte // 上一个区块的Hash
-	Target       []byte // PoW, target difficulty
-	Nonce        int64  // Pow. nonce
-	Transactions []*transaction.Transaction
+	// header
+	// version  // 这里没有
+	PrevHash  []byte // 上一个区块的Hash
+	Hash      []byte // 区块的Hash  // 实际上是MerkleTree Root的哈希
+	Timestamp int64  // 时间戳
+	Target    []byte // PoW, target difficulty
+	Nonce     int64  // Pow. nonce
+	// body
+	Transactions []*transaction.Transaction // UTXO
 }
 
 func (b *Block) BackTrasactionSummary() []byte {
+	// 将body date转换成字节, 这里取各个交易ID
 	txIDs := make([][]byte, 0)
 	for _, tx := range b.Transactions {
 		txIDs = append(txIDs, tx.ID)
@@ -31,8 +35,8 @@ func (b *Block) BackTrasactionSummary() []byte {
 func (b *Block) SetHash() {
 	information := bytes.Join(
 		[][]byte{
-			utils.ToHexInt(b.Timestamp),
 			b.PrevHash,
+			utils.ToHexInt(b.Timestamp),
 			b.Target,
 			utils.ToHexInt(b.Nonce),
 			b.BackTrasactionSummary(),
@@ -45,11 +49,11 @@ func (b *Block) SetHash() {
 
 func CreateBlock(prevhash []byte, txs []*transaction.Transaction) *Block {
 	block := &Block{
-		Timestamp:    time.Now().Unix(),
-		Hash:         []byte{},
 		PrevHash:     prevhash,
-		Target:       []byte{},
-		Nonce:        0,
+		Hash:         []byte{}, // 占位
+		Timestamp:    time.Now().Unix(),
+		Target:       []byte{}, // 占位
+		Nonce:        0,        // 占位
 		Transactions: txs,
 	}
 	block.Target = block.GetTarget()

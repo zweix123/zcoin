@@ -23,7 +23,7 @@ func (tp *TransactionPool) SaveFile() {
 	encoder := gob.NewEncoder(&content)
 	err := encoder.Encode(tp)
 	utils.Handle(err)
-	err = os.WriteFile(constcoe.TransactionPoolFile, content.Bytes(), 0644) // 0644: 八进制644: 110 100 100
+	err = os.WriteFile(constcoe.TransactionPoolFile, content.Bytes(), 0644)
 	utils.Handle(err)
 }
 
